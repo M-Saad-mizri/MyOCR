@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OCR Image to Text</title>
+    <style>
+        /* Base layout and typography */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+            color: #2e2e2e;
+        }
+
+        .container {
+            max-width: 750px;
+            margin: auto;
+            background: #ffffff;
+            padding: 30px 40px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+            border-radius: 12px;
+        }
+
+
+        #imageInput {
+            width: 24%;
+        }
+
+        /* Headings */
+        h1 {
+            text-align: center;
+            color: #0e101a;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        h2 {
+            text-align: center;
+            color: #2f3c50;
+            font-size: 20px;
+            margin-bottom: 25px;
+        }
+
+        .toast {
+            visibility: hidden;
+            min-width: 220px;
+            background-color: #e5982c;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 12px 20px;
+            position: fixed;
+            z-index: 1000;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            font-size: 15px;
+            opacity: 0;
+            transition: opacity 0.5s ease, bottom 0.5s ease;
+        }
+
+        .toast.show {
+            visibility: visible;
+            opacity: 1;
+            bottom: 50px;
+        }
+
+        /* Image preview section */
+        #previewContainer {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        #imagePreview {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+            display: none;
+            border: 1px solid #d0d0d0;
+            text-align: center;
+        }
+
+        /* Buttons */
+        #extractBtn {
+            padding: 10px 22px;
+            font-size: 0.5 rem;
+            background-color: #343541;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        #extractBtn:hover {
+            background-color: #202123;
+        }
+
+
+        /* OCR result text area */
+        .result {
+            margin-top: 30px;
+        }
+
+        #outputText {
+            width: 100%;
+            padding: 14px;
+            font-size: 0.9rem;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #fafafa;
+            color: #222;
+            resize: vertical;
+            box-sizing: border-box;
+            line-height: 1.5;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Loader */
+        #loader {
+            text-align: center;
+            font-weight: 600;
+            color: #555;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .btns-div {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 15px;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        /* Mobile: stack buttons vertically */
+        @media (max-width: 600px) {
+            .btns-div {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            #imageInput {
+                width: 34%;
+            }
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js">
+    </script>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Image to Text (OCR)</h1>
+        <p style="text-align: center;">Upload an image file to extract text using Optical Character Recognition (OCR).
+        </p>
+        <hr>
+        <div class="btns-div">
+            <input type="file" id="imageInput" accept="image/*" title="Select an image file to extract text" />
+            <p style="font-weight: 600; font-family: 'Times New Roman', Times, serif;">-OR-</p>
+            <button id="pasteBtn">Paste from Clipboard</button>
+        </div>
+
+        <div id="previewContainer">
+            <img id="imagePreview" src="" alt="Image Preview" />
+        </div>
+        <div id="loader">Processing...</div>
+
+        <button id="extractBtn">Extract Text</button>
+        </di>
+        <hr>
+
+        <div class="result">
+            <div>
+                <!-- <h2>Extracted Text:</h2> -->
+                <button style="margin-bottom: 10px; border: none; background-color: transparent; cursor: pointer;"
+                    id="copyBtn"><img width="24" height="24" src="https://img.icons8.com/material-rounded/24/copy.png"
+                        alt="copy" /></button>
+            </div>
+            <div id="toast" class="toast">Text copied to clipboard!</div>
+            <textarea id="outputText" rows="10"></textarea>
+        </div>
+
+    </div>
+
+    <script>
+        const imageInput = document.getElementById("imageInput");
+        const imagePreview = document.getElementById("imagePreview");
+        const extractBtn = document.getElementById("extractBtn");
+        const outputText = document.getElementById("outputText");
+        const loader = document.getElementById("loader");
+        const copyBtn = document.getElementById("copyBtn");
+
+        let selectedImage = null;
+
+        imageInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                selectedImage = file;
+                const reader = new FileReader();
+                reader.onload = () => {
+                    imagePreview.src = reader.result;
+                    imagePreview.style.display = "block";
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        extractBtn.addEventListener("click", () => {
+            if (!selectedImage) {
+                alert("Please select an image first.");
+                return;
+            }
+
+            loader.style.display = "block";
+            outputText.value = "";
+
+            Tesseract.recognize(
+                selectedImage,
+                "eng", // you can change language here if needed
+                {
+                    logger: m => console.log(m)
+                }
+            ).then(({ data: { text } }) => {
+                outputText.value = text;
+                loader.style.display = "none";
+            }).catch(error => {
+                console.error(error);
+                alert("Error during OCR.");
+                loader.style.display = "none";
+            });
+        });
+
+        function showToast(message) {
+            const toast = document.getElementById("toast");
+            toast.textContent = message;
+            toast.classList.add("show");
+
+            setTimeout(() => {
+                toast.classList.remove("show");
+            }, 3000);
+        }
+
+
+        copyBtn.addEventListener("click", () => {
+            outputText.select();
+            document.execCommand("copy");
+            showToast("Text copied to clipboard!");
+
+        });
+
+        const pasteBtn = document.getElementById("pasteBtn");
+
+        pasteBtn.addEventListener("click", async () => {
+            try {
+                const clipboardItems = await navigator.clipboard.read();
+
+                for (const item of clipboardItems) {
+                    if (item.types.includes("image/png")) {
+                        const blob = await item.getType("image/png");
+                        selectedImage = blob;
+                        const imageURL = URL.createObjectURL(blob);
+                        imagePreview.src = imageURL;
+                        imagePreview.style.display = "block";
+                        return;
+                    } else if (item.types.includes("image/jpeg")) {
+                        const blob = await item.getType("image/jpeg");
+                        selectedImage = blob;
+                        const imageURL = URL.createObjectURL(blob);
+                        imagePreview.src = imageURL;
+                        imagePreview.style.display = "block";
+                        return;
+                    }
+                }
+
+                alert("No image found in clipboard.");
+            } catch (error) {
+                console.error(error);
+                alert("Clipboard access failed. Make sure your browser allows it (must be HTTPS or localhost).");
+            }
+        });
+
+    </script>
+</body>
+
+</html>
