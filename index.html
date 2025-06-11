@@ -120,13 +120,33 @@
             box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
         }
 
-        /* Loader */
+        /* Initially hide loader and center it */
         #loader {
-            text-align: center;
-            font-weight: 600;
-            color: #555;
-            margin-top: 10px;
             display: none;
+            text-align: center;
+            margin: 20px auto;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        /* Spinner loader inside #loader */
+        #loader::after {
+            content: "";
+            display: inline-block;
+            width: 22px;
+            height: 22px;
+            border: 3px solid #ccc;
+            border-top: 3px solid #343541;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .btns-div {
@@ -195,8 +215,11 @@
         const outputText = document.getElementById("outputText");
         const loader = document.getElementById("loader");
         const copyBtn = document.getElementById("copyBtn");
+        const pasteBtn = document.getElementById("pasteBtn");
 
         let selectedImage = null;
+        let processing = false;
+        let clipboardInterval = null;
 
         imageInput.addEventListener("change", (e) => {
             const file = e.target.files[0];
@@ -206,12 +229,73 @@
                 reader.onload = () => {
                     imagePreview.src = reader.result;
                     imagePreview.style.display = "block";
+                    autoProcess(); // Automatically start OCR
                 };
                 reader.readAsDataURL(file);
             }
         });
 
-        extractBtn.addEventListener("click", () => {
+        extractBtn.addEventListener("click", processImage);
+
+        async function autoPasteFromClipboard(showAlert = false) {
+            try {
+                const clipboardItems = await navigator.clipboard.read();
+                for (const item of clipboardItems) {
+                    if (item.types.includes("image/png") || item.types.includes("image/jpeg")) {
+                        const type = item.types.includes("image/png") ? "image/png" : "image/jpeg";
+                        const blob = await item.getType(type);
+                        selectedImage = blob;
+                        const imageURL = URL.createObjectURL(blob);
+                        imagePreview.src = imageURL;
+                        imagePreview.style.display = "block";
+                        stopClipboardMonitoring(); // stop checking during processing
+                        autoProcess();
+                        return true;
+                    }
+                }
+
+                if (showAlert) {
+                    alert("No image found in clipboard.");
+                }
+                return false;
+            } catch (error) {
+                console.error("Clipboard access failed:", error);
+                if (showAlert) {
+                    alert("Clipboard access failed. Use HTTPS or localhost.");
+                }
+                return false;
+            }
+        }
+
+        function startClipboardMonitoring() {
+            if (!clipboardInterval) {
+                clipboardInterval = setInterval(() => {
+                    autoPasteFromClipboard(false);
+                }, 1000);
+            }
+        }
+
+        function stopClipboardMonitoring() {
+            if (clipboardInterval) {
+                clearInterval(clipboardInterval);
+                clipboardInterval = null;
+            }
+        }
+
+        // Start checking for screenshots initially
+        startClipboardMonitoring();
+
+        pasteBtn.addEventListener("click", async () => {
+            await autoPasteFromClipboard(true);
+        });
+
+        function autoProcess() {
+            if (selectedImage && !processing) {
+                processImage();
+            }
+        }
+
+        function processImage() {
             if (!selectedImage) {
                 alert("Please select an image first.");
                 return;
@@ -219,73 +303,54 @@
 
             loader.style.display = "block";
             outputText.value = "";
+            processing = true;
 
             Tesseract.recognize(
                 selectedImage,
-                "eng", // you can change language here if needed
+                "eng",
                 {
                     logger: m => console.log(m)
                 }
             ).then(({ data: { text } }) => {
                 outputText.value = text;
+
+                // Auto-copy to clipboard
+                navigator.clipboard.writeText(text).then(() => {
+                    showToast("Text extracted and copied!");
+                });
+
                 loader.style.display = "none";
+                processing = false;
+
+                // Restart image detection
+                startClipboardMonitoring();
             }).catch(error => {
                 console.error(error);
                 alert("Error during OCR.");
                 loader.style.display = "none";
+                processing = false;
+                startClipboardMonitoring();
             });
-        });
+        }
 
         function showToast(message) {
             const toast = document.getElementById("toast");
             toast.textContent = message;
             toast.classList.add("show");
-
             setTimeout(() => {
                 toast.classList.remove("show");
             }, 3000);
         }
 
-
         copyBtn.addEventListener("click", () => {
             outputText.select();
             document.execCommand("copy");
             showToast("Text copied to clipboard!");
-
+            startClipboardMonitoring(); // restart checking after manual copy
         });
-
-        const pasteBtn = document.getElementById("pasteBtn");
-
-        pasteBtn.addEventListener("click", async () => {
-            try {
-                const clipboardItems = await navigator.clipboard.read();
-
-                for (const item of clipboardItems) {
-                    if (item.types.includes("image/png")) {
-                        const blob = await item.getType("image/png");
-                        selectedImage = blob;
-                        const imageURL = URL.createObjectURL(blob);
-                        imagePreview.src = imageURL;
-                        imagePreview.style.display = "block";
-                        return;
-                    } else if (item.types.includes("image/jpeg")) {
-                        const blob = await item.getType("image/jpeg");
-                        selectedImage = blob;
-                        const imageURL = URL.createObjectURL(blob);
-                        imagePreview.src = imageURL;
-                        imagePreview.style.display = "block";
-                        return;
-                    }
-                }
-
-                alert("No image found in clipboard.");
-            } catch (error) {
-                console.error(error);
-                alert("Clipboard access failed. Make sure your browser allows it (must be HTTPS or localhost).");
-            }
-        });
-
     </script>
+    
+
 </body>
 
 </html>
